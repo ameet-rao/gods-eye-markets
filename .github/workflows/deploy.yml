@@ -1,11 +1,12 @@
 name: Deploy
 
 # Rebuilds the site with fresh prices and crisis data, then publishes it to the gh-pages branch.
+# Open pages poll the published data.json, so each run reaches viewers without a reload.
 on:
   push:
     branches: [main]
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -29,6 +30,9 @@ jobs:
         run: npm run snapshot
         continue-on-error: true
       - run: npm run build
+        env:
+          # Optional: a free finnhub.io key turns on streaming prices. It ships in the page, so use a free-tier key.
+          VITE_FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
       - run: touch dist/.nojekyll
       - uses: JamesIves/github-pages-deploy-action@v4
         with:

@@ -20,6 +20,9 @@ const isMobile = () => window.matchMedia('(max-width: 760px)').matches;
 const state = {
   events: snapshot.events.map((e) => ({ ...e })),
   quotes: snapshot.quotes,
+  takenAt: snapshot.takenAt,
+  quotesLive: false,
+  streaming: false,
   feedStatus: { usgs: 'loading', gdacs: 'loading', eonet: 'loading', quotes: 'loading' },
   filter: 'all',
   query: '',
@@ -238,7 +241,7 @@ function buildLabels() {
     el.setAttribute('aria-label', `${h.name}: ${h.ideas.map((i) => i.t).join(', ')}`);
     const top = h.ideas.slice(0, 2).map((i) => {
       const q = quote(i.t);
-      return `<span class="gt ${i.side}">${esc(i.t)}<i>${i.side === 'long' ? '▲' : '▼'}</i>${q ? `<em class="${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)}</em>` : ''}</span>`;
+      return `<span class="gt ${i.side}">${esc(i.t)}<i>${i.side === 'long' ? '▲' : '▼'}</i>${q ? `<em data-q="${esc(i.t)}" class="${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)}</em>` : ''}</span>`;
     }).join('');
     const live = state.links.get(h.id)?.length;
     el.innerHTML = `<span class="gname">${live ? '<b class="alert" title="Live event nearby"></b>' : ''}${esc(h.name)}</span><span class="gtk">${top}</span>`;
@@ -379,7 +382,7 @@ function ideaRow(i) {
       <button class="tk" data-ticker="${esc(i.t)}">${esc(i.t)}</button>
       <span class="side ${i.side}">${i.side === 'long' ? 'LONG' : 'SHORT'}</span>
       <span class="iname">${esc(q?.name || '')}</span>
-      ${q ? `<span class="px">${fmtPrice(q.last)}</span><span class="chg ${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)}</span>${spark(q.closes)}` : '<span class="px muted">n/a</span>'}
+      ${q ? `<span class="px" data-q="${esc(i.t)}" data-f="px">${fmtPrice(q.last)}</span><span class="chg ${q.chg >= 0 ? 'pos' : 'neg'}" data-q="${esc(i.t)}">${fmtPct(q.chg)}</span>${spark(q.closes)}` : '<span class="px muted">n/a</span>'}
     </div>
     <p class="why">${esc(i.why)} ${via}</p>
     <div class="acts">
@@ -400,8 +403,10 @@ const km = (d) => `${Math.round(d).toLocaleString()} km`;
 const typeLabel = (t) => EVENT_THEMES[t]?.label || t;
 
 function priceFoot() {
-  const live = state.feedStatus.quotes === 'live';
-  return `<p class="foot">${live ? 'Prices: live from Yahoo Finance' : `Prices: close of ${esc(state.quotes.asOf)}, ${esc(state.quotes.source)}`}. Change is vs prior close; sparkline is the last 5 sessions.</p>`;
+  const src = state.streaming ? 'Prices: streaming trades from Finnhub'
+    : state.quotesLive ? 'Prices: live from Yahoo Finance'
+    : `Prices: Yahoo Finance as of ${esc(fmtTime(state.takenAt))}`;
+  return `<p class="foot">${src}. Change is vs prior close; sparkline is the last 5 sessions.</p>`;
 }
 
 function renderPanel() {
@@ -449,7 +454,7 @@ function renderPanel() {
     html = `
       <div class="p-head" style="--cat:#3fd0ff">
         <h2>${esc(t)} <small>${esc(q?.name || '')}</small></h2>
-        ${q ? `<div class="metric big"><span class="px">${fmtPrice(q.last)}</span> <span class="chg ${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)} 1d</span> <span class="chg ${q.chg5 >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg5)} 5d</span> ${spark(q.closes, 96, 28)}</div>` : ''}
+        ${q ? `<div class="metric big"><span class="px" data-q="${esc(t)}" data-f="px">${fmtPrice(q.last)}</span> <span class="chg ${q.chg >= 0 ? 'pos' : 'neg'}" data-q="${esc(t)}" data-suffix=" 1d">${fmtPct(q.chg)} 1d</span> <span class="chg ${q.chg5 >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg5)} 5d</span> ${spark(q.closes, 96, 28)}</div>` : ''}
       </div>
       <h3 class="ideas-h">Appears in ${refs.length} signal${refs.length === 1 ? '' : 's'}</h3>
       <ul class="refs">${refs.map((r) => `<li><button class="ev" ${r.hotspot ? `data-hotspot="${r.hotspot}"` : `data-event="${esc(r.event)}"`}><span class="side ${r.side}">${r.side.toUpperCase()}</span><b>${esc(r.label)}</b><span>${esc(r.why)}</span></button></li>`).join('')}</ul>
@@ -520,7 +525,7 @@ function renderList() {
     return `<li><button class="row ${sel?.id === h.id ? 'sel' : ''}" data-hotspot="${h.id}" style="--cat:${CATEGORIES[h.cat].color}">
       <span class="cdot" title="Heat ${ht.toFixed(1)}"></span>
       <span class="r-main"><b>${esc(h.name)}</b>${live ? `<i class="live">${live} live event${live > 1 ? 's' : ''} nearby</i>` : ''}<span class="r-meta">${esc(h.metric)}</span>
-      <span class="chips">${h.ideas.slice(0, 4).map((i) => { const q = quote(i.t); return `<span class="chip ${i.side}">${esc(i.t)}${q ? ` <em class="${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)}</em>` : ''}</span>`; }).join('')}</span></span>
+      <span class="chips">${h.ideas.slice(0, 4).map((i) => { const q = quote(i.t); return `<span class="chip ${i.side}">${esc(i.t)}${q ? ` <em data-q="${esc(i.t)}" class="${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)}</em>` : ''}</span>`; }).join('')}</span></span>
     </button></li>`;
   }).join('');
   const evHtml = evs.map((e) => `<li><button class="row ev-row ${sel?.id === e.id ? 'sel' : ''}" data-event="${esc(e.id)}" style="--cat:${LEVEL_COLOR[e.level]}">
@@ -536,7 +541,7 @@ function renderTape() {
   const lb = leaderboard(state.events, state.links).slice(0, 18);
   const items = lb.map((s) => {
     const q = quote(s.t);
-    return `<button class="titem" data-ticker="${esc(s.t)}"><b>${esc(s.t)}</b><span class="side ${s.side}">${s.side === 'long' ? '▲' : '▼'}</span>${q ? `<span>${fmtPrice(q.last)}</span><span class="${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)}</span>` : ''}</button>`;
+    return `<button class="titem" data-ticker="${esc(s.t)}"><b>${esc(s.t)}</b><span class="side ${s.side}">${s.side === 'long' ? '▲' : '▼'}</span>${q ? `<span data-q="${esc(s.t)}" data-f="px">${fmtPrice(q.last)}</span><span data-q="${esc(s.t)}" class="${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)}</span>` : ''}</button>`;
   }).join('');
   $('#tapeTrack').innerHTML = items + `<span aria-hidden="true" class="dup">${items}</span>`;
 }
@@ -545,12 +550,12 @@ function renderTape() {
 function renderFeeds() {
   const labels = { usgs: 'USGS', gdacs: 'GDACS', eonet: 'NASA EONET', quotes: 'Prices' };
   const st = Object.values(state.feedStatus);
-  const sd = new Date(snapshot.takenAt);
+  const sd = new Date(state.takenAt);
   const snapDate = sd.toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) + `<span class="full">, ${sd.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })}</span>`;
-  const detail = Object.entries(state.feedStatus).map(([k, v]) => `${labels[k]}: ${v === 'live' ? 'live' : v === 'loading' ? 'connecting' : 'saved data'}`).join('\n');
+  const detail = Object.entries(state.feedStatus).map(([k, v]) => `${labels[k]}: ${v === 'live' ? (k === 'quotes' && state.streaming ? 'streaming' : 'live') : v === 'loading' ? 'connecting' : `as of ${fmtTime(state.takenAt)}`}`).join('\n');
   let cls = 'snapshot', text = `<span class="full">Data as of </span>${snapDate}<span class="full"> UTC</span>`;
   if (st.includes('loading')) { cls = 'loading'; text = 'Connecting…'; }
-  else if (st.every((v) => v === 'live')) { cls = 'live'; text = 'Live data'; }
+  else if (st.every((v) => v === 'live')) { cls = 'live'; text = state.streaming ? 'Live, streaming' : 'Live data'; }
   else if (st.some((v) => v === 'live')) { cls = 'partial'; text = 'Partly live'; }
   $('#feeds').innerHTML = `<span class="feed ${cls}" title="${esc(detail)}"><i></i><span>${text}</span></span>`;
 }
@@ -574,9 +579,39 @@ renderFeeds();
 renderList();
 renderTape();
 
+// The deploy job republishes data.json every few minutes; open pages pick it up without a reload.
+async function loadPublished() {
+  try {
+    const r = await fetch(`./data.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d?.takenAt && d.takenAt > state.takenAt ? d : null;
+  } catch { return null; }
+}
+function freshEnough(iso) { return Date.now() - Date.parse(iso) < 20 * 60e3; }
+function fmtTime(iso) {
+  const d = new Date(iso);
+  const mins = Math.round((Date.now() - d) / 60e3);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+}
+
 async function goLive() {
   const parts = {};
-  const results = await Promise.all(Object.keys(FEEDS).map(async (k) => [k, await loadFeed(k)]));
+  const [results, published] = await Promise.all([
+    Promise.all(Object.keys(FEEDS).map(async (k) => [k, await loadFeed(k)])),
+    loadPublished(),
+  ]);
+  if (published) {
+    // Sources the browser can't reach directly fall back to the newest published copy.
+    const srcOf = { USGS: 'usgs', GDACS: 'gdacs', 'NASA EONET': 'eonet' };
+    const failed = new Set(results.filter(([, r]) => !r.ok).map(([k]) => k));
+    state.events = [...state.events.filter((e) => !failed.has(srcOf[e.source])), ...published.events.filter((e) => failed.has(srcOf[e.source]))];
+    state.quotes = { ...published.quotes, q: { ...state.quotes.q, ...published.quotes.q } };
+    state.takenAt = published.takenAt;
+    reapplyTrades();
+  }
   for (const [k, r] of results) {
     state.feedStatus[k] = r.ok ? 'live' : 'snapshot';
     if (r.ok) parts[k] = r.events;
@@ -591,8 +626,10 @@ async function goLive() {
   }
   relink();
   const q = await loadQuotes(allSymbols());
-  state.feedStatus.quotes = q.ok ? 'live' : 'snapshot';
-  if (q.ok) state.quotes = { asOf: q.asOf, source: q.source, q: { ...state.quotes.q, ...q.q } };
+  state.quotesLive = q.ok;
+  if (q.ok) { state.quotes = { asOf: q.asOf, source: q.source, q: { ...state.quotes.q, ...q.q } }; reapplyTrades(); }
+  state.feedStatus.quotes = q.ok || state.streaming || freshEnough(state.takenAt) ? 'live' : 'snapshot';
+  for (const k of Object.keys(FEEDS)) if (state.feedStatus[k] !== 'live' && freshEnough(state.takenAt)) state.feedStatus[k] = 'live';
   renderFeeds();
   renderList();
   renderTape();
@@ -600,5 +637,68 @@ async function goLive() {
   if (state.selected?.kind === 'event' && !state.eventsById.has(state.selected.id)) select(null);
   else if (state.selected) renderPanel();
 }
-map.once('load', goLive);
-setInterval(goLive, 5 * 60 * 1000);
+map.once('load', () => { goLive(); streamPrices(); });
+setInterval(goLive, 60 * 1000);
+
+// ---------- streaming prices (on when the site is built with a Finnhub key) ----------
+const FINNHUB_KEY = import.meta.env.VITE_FINNHUB_KEY;
+const lastTrade = new Map();
+let rolled = new Set();
+let priceDirty = false;
+
+function applyTrade(t, price, ts) {
+  const entry = state.quotes.q[t];
+  if (!entry) return;
+  const closes = entry[1].slice();
+  // First trade of a new session starts a new daily bar; later trades move it.
+  if (new Date(ts).toISOString().slice(0, 10) > state.quotes.asOf && !rolled.has(t)) {
+    closes.shift(); closes.push(price); rolled.add(t);
+  } else closes[closes.length - 1] = price;
+  state.quotes.q[t] = [entry[0], closes];
+  priceDirty = true;
+}
+function reapplyTrades() {
+  rolled = new Set();
+  for (const [t, x] of lastTrade) if (x.ts > Date.parse(state.takenAt)) applyTrade(t, x.p, x.ts);
+}
+function patchPrices() {
+  for (const el of document.querySelectorAll('[data-q]')) {
+    const q = quote(el.dataset.q);
+    if (!q) continue;
+    if (el.dataset.f === 'px') { el.textContent = fmtPrice(q.last); continue; }
+    el.textContent = fmtPct(q.chg) + (el.dataset.suffix || '');
+    el.classList.toggle('pos', q.chg >= 0);
+    el.classList.toggle('neg', q.chg < 0);
+  }
+}
+setInterval(() => { if (priceDirty) { priceDirty = false; patchPrices(); } }, 1000);
+
+function streamPrices() {
+  if (!FINNHUB_KEY) return;
+  // The free plan streams up to 50 symbols per connection: take the most-signalled ones.
+  const syms = leaderboard(state.events, state.links).map((s) => s.t).slice(0, 50);
+  let retry = 2000;
+  const open = () => {
+    const ws = new WebSocket(`wss://ws.finnhub.io?token=${encodeURIComponent(FINNHUB_KEY)}`);
+    ws.onopen = () => {
+      retry = 2000;
+      syms.forEach((s) => ws.send(JSON.stringify({ type: 'subscribe', symbol: s })));
+      state.streaming = true;
+      state.feedStatus.quotes = 'live';
+      renderFeeds();
+    };
+    ws.onmessage = (m) => {
+      let d;
+      try { d = JSON.parse(m.data); } catch { return; }
+      if (d.type !== 'trade') return;
+      for (const x of d.data) { lastTrade.set(x.s, { p: x.p, ts: x.t }); applyTrade(x.s, x.p, x.t); }
+    };
+    ws.onclose = () => {
+      state.streaming = false;
+      renderFeeds();
+      setTimeout(open, retry);
+      retry = Math.min(retry * 2, 60e3);
+    };
+  };
+  open();
+}

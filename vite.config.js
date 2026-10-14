@@ -1,10 +1,22 @@
 import { defineConfig } from 'vite';
+import { readFileSync } from 'node:fs';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import { FEEDS } from './src/feeds.js';
 import { fetchQuotes, fetchText } from './scripts/yahoo.mjs';
 
 // Same-origin /api routes for `npm run dev` and `npm run preview`, so the browser gets live
 // prices (Yahoo has no CORS) and feeds without depending on each provider's CORS headers.
+// Publishes the snapshot next to the page as data.json so open pages can poll for newer data.
+function publishData() {
+  return {
+    name: 'publish-data',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'data.json', source: readFileSync('src/snapshot.json', 'utf8') });
+    },
+  };
+}
+
 function liveApi() {
   const cache = new Map();
   const cached = async (key, ttl, fn) => {
@@ -44,7 +56,7 @@ function liveApi() {
 
 export default defineConfig({
   base: './',
-  plugins: [liveApi(), viteSingleFile()],
+  plugins: [liveApi(), publishData(), viteSingleFile()],
   server: { port: 4173 },
   preview: { port: 4173 },
   build: { chunkSizeWarningLimit: 3000 },

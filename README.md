@@ -24,8 +24,16 @@ gets live Yahoo prices (Yahoo blocks direct browser calls) and live feeds regard
 
 Pushing to `main` runs `.github/workflows/deploy.yml`, which refreshes the data snapshot,
 builds, and publishes `dist/` to the `gh-pages` branch for GitHub Pages. The same workflow
-runs every 30 minutes, so the hosted site's prices and events stay current without a server.
-On the hosted site, USGS and NASA data also load live in the browser.
+runs every 5 minutes (GitHub may delay scheduled runs) and also publishes `data.json`, which
+open pages poll every minute, so viewers get new prices and events without reloading.
+In the browser, the crisis feeds are also fetched directly every minute.
+
+### Streaming prices
+
+Add a free [Finnhub](https://finnhub.io/register) API key as the repository secret
+`FINNHUB_KEY` (Settings → Secrets and variables → Actions), then re-run the Deploy workflow.
+The page then streams live trades for the 50 most-signalled tickers. The key is embedded in
+the public page, so use a free-tier key.
 
 Or just open `gods-eye-markets.html` in a browser: it is the whole app in one file and runs
 on the bundled snapshot (it still tries the public feeds directly).
@@ -38,8 +46,9 @@ on the bundled snapshot (it still tries the public feeds directly).
 | Cyclones, floods, droughts, eruptions (Orange/Red) | GDACS API | no |
 | Storm tracks, volcanoes | NASA EONET v3 | no |
 | Prices (5 daily closes) | Yahoo Finance spark endpoint, server-side | no |
+| Streaming trades (optional) | Finnhub WebSocket | free key |
 
-The header chips show each source as **live** or **snapshot**. When a source can't be
+The header pill shows whether data is live (fetched or published in the last 20 minutes). When a source can't be
 reached, the app falls back to `src/snapshot.json`, which is baked into the build. Refresh it
 with `npm run snapshot` (fetches everything from Node), then `npm run build`.
 
