@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>God's Eye Markets</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A globe of supply chain choke points, critical infrastructure and live crises, mapped to the stocks they move.">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body>
+<div id="app">
+  <div id="map" aria-label="Globe of market-moving hotspots"></div>
+
+  <header class="top">
+    <div class="brand">God's Eye Markets</div>
+    <div class="feeds" id="feeds" aria-live="polite"></div>
+    <button id="themeBtn" class="theme-btn" type="button">Light mode</button>
+  </header>
+
+  <aside id="rail" class="rail">
+    <div class="rail-head">
+      <label class="search">
+        <span class="visually-hidden">Search places or tickers</span>
+        <input id="q" type="search" placeholder="Search a place or ticker" autocomplete="off">
+      </label>
+      <button id="railClose" class="icon-btn only-mobile" aria-label="Close list">✕</button>
+    </div>
+    <div class="filters" id="filters" role="group" aria-label="Filter"></div>
+    <ol id="list" class="list"></ol>
+  </aside>
+
+  <section id="panel" class="panel" hidden aria-live="polite"></section>
+
+  <button id="railOpen" class="fab only-mobile">Hotspots &amp; events</button>
+
+  <footer class="bottom">
+    <div class="tape-label">Top tickers</div>
+    <div class="tape" id="tape"><div class="tape-track" id="tapeTrack"></div></div>
+    <div class="nfa">Not financial advice. Ideas are illustrative and can be wrong.</div>
+  </footer>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
