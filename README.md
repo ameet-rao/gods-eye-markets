@@ -4,7 +4,7 @@ A dark, simplified 3D globe that maps supply-chain choke points, critical infras
 commodity hubs and live crises to the stocks they move. Click a pulsing hotspot to get a
 dossier: why the place matters, which live threats are in range, and long/short ticker
 ideas with a one-line thesis, last price, 1-day move and a 5-day sparkline. Each idea links
-to a Yahoo Finance quote and a Robinhood trade page. Nothing is executed in-app.
+to a Yahoo Finance quote and the Google Finance page for the ticker. Nothing is executed in-app.
 
 **Research tool, not financial advice.**
 

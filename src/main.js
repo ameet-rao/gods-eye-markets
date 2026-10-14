@@ -1,3 +1,4 @@
+import { googleFinanceUrl } from './exchanges.js';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { feature, mesh } from 'topojson-client';
@@ -60,8 +61,8 @@ function spark(closes, w = 64, h = 22) {
 
 // ---------- theme ----------
 const MAP_THEME = {
-  dark: { ocean: '#0b1520', grat: '#1a3247', land: '#16212d', coast: '#33536b', borders: '#2a3f52', lanes: '#4cc3f0', sky: '#05080d', horizon: '#123a50', stroke: '#05080d', lvl1: '#e9c46a' },
-  light: { ocean: '#dbe5ee', grat: '#c4d2de', land: '#f8fafc', coast: '#9db0c1', borders: '#cfd9e2', lanes: '#1f7fb0', sky: '#eef2f6', horizon: '#c2d6e5', stroke: '#ffffff', lvl1: '#c99400' },
+  dark: { ocean: '#1b4f7d', grat: '#2f689a', land: '#3f7a3b', coast: '#2b5a2a', borders: '#6a9a5e', ice: '#dfe8ee', lanes: '#e6f2ff', sky: '#05080d', horizon: '#3b7fc4', stroke: '#0b1a2a', lvl1: '#ffd166' },
+  light: { ocean: '#5f9fd8', grat: '#82b6e2', land: '#78ad62', coast: '#4f8540', borders: '#a4cc92', ice: '#f5f8fb', lanes: '#ffffff', sky: '#eef2f6', horizon: '#a9cdf0', stroke: '#ffffff', lvl1: '#f2b705' },
 };
 let themeOverride = (() => { try { return localStorage.getItem('theme'); } catch { return null; } })();
 function storedTheme() { return themeOverride; }
@@ -79,6 +80,7 @@ function applyTheme() {
   m.setPaintProperty('ocean', 'background-color', c.ocean);
   m.setPaintProperty('graticule', 'line-color', c.grat);
   m.setPaintProperty('land', 'fill-color', c.land);
+  m.setPaintProperty('ice', 'fill-color', c.ice);
   m.setPaintProperty('coast', 'line-color', c.coast);
   m.setPaintProperty('borders', 'line-color', c.borders);
   m.setPaintProperty('lanes', 'line-color', c.lanes);
@@ -93,6 +95,8 @@ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ap
 
 // ---------- map ----------
 const land = feature(landTopo, landTopo.objects.land);
+// Ice sheets are drawn over the green land so the poles read like a real globe.
+const ice = { type: 'FeatureCollection', features: feature(countriesTopo, countriesTopo.objects.countries).features.filter((f) => ['Antarctica', 'Greenland'].includes(f.properties.name)) };
 const borders = mesh(countriesTopo, countriesTopo.objects.countries, (a, b) => a !== b);
 const graticule = {
   type: 'FeatureCollection',
@@ -181,6 +185,7 @@ const map = new maplibregl.Map({
     },
     sources: {
       land: { type: 'geojson', data: land },
+      ice: { type: 'geojson', data: ice },
       borders: { type: 'geojson', data: borders },
       graticule: { type: 'geojson', data: graticule },
       lanes: { type: 'geojson', data: lanesGeoJSON() },
@@ -190,12 +195,13 @@ const map = new maplibregl.Map({
     },
     layers: [
       { id: 'ocean', type: 'background', paint: { 'background-color': '#08111b' } },
-      { id: 'graticule', type: 'line', source: 'graticule', paint: { 'line-color': '#16324a', 'line-width': 0.6, 'line-opacity': 0.55 } },
+      { id: 'graticule', type: 'line', source: 'graticule', paint: { 'line-color': '#16324a', 'line-width': 0.6, 'line-opacity': 0.35 } },
       { id: 'land', type: 'fill', source: 'land', paint: { 'fill-color': '#121c27', 'fill-antialias': true } },
+      { id: 'ice', type: 'fill', source: 'ice', paint: { 'fill-color': '#dfe8ee' } },
       { id: 'coast', type: 'line', source: 'land', paint: { 'line-color': '#2b4b62', 'line-width': 0.8 } },
       { id: 'borders', type: 'line', source: 'borders', paint: { 'line-color': '#24394b', 'line-width': 0.5 } },
       { id: 'lanes', type: 'line', source: 'lanes', paint: {
-        'line-color': '#3fd0ff', 'line-opacity': ['case', ['get', 'main'], 0.42, 0.22],
+        'line-color': '#3fd0ff', 'line-opacity': ['case', ['get', 'main'], 0.55, 0.3],
         'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.8, 4, 1.6], 'line-dasharray': [2, 2] } },
       { id: 'tracks', type: 'line', source: 'tracks', layout: { 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 1.4, 'line-opacity': 0.7 } },
       // drought zones read as broad haze rather than a point
@@ -378,7 +384,7 @@ function ideaRow(i) {
     <p class="why">${esc(i.why)} ${via}</p>
     <div class="acts">
       <a href="https://finance.yahoo.com/quote/${encodeURIComponent(i.t)}" target="_blank" rel="noopener">Quote ↗</a>
-      <a class="trade" href="https://robinhood.com/us/en/stocks/${encodeURIComponent(i.t)}/" target="_blank" rel="noopener">Trade ${esc(i.t)} ↗</a>
+      <a class="trade" href="${googleFinanceUrl(i.t)}" target="_blank" rel="noopener">Trade ${esc(i.t)} ↗</a>
     </div>
   </li>`;
 }
@@ -449,7 +455,7 @@ function renderPanel() {
       <ul class="refs">${refs.map((r) => `<li><button class="ev" ${r.hotspot ? `data-hotspot="${r.hotspot}"` : `data-event="${esc(r.event)}"`}><span class="side ${r.side}">${r.side.toUpperCase()}</span><b>${esc(r.label)}</b><span>${esc(r.why)}</span></button></li>`).join('')}</ul>
       <div class="acts wide">
         <a href="https://finance.yahoo.com/quote/${encodeURIComponent(t)}" target="_blank" rel="noopener">Quote ↗</a>
-        <a class="trade" href="https://robinhood.com/us/en/stocks/${encodeURIComponent(t)}/" target="_blank" rel="noopener">Trade ${esc(t)} ↗</a>
+        <a class="trade" href="${googleFinanceUrl(t)}" target="_blank" rel="noopener">Trade ${esc(t)} ↗</a>
       </div>
       ${priceFoot()}`;
   }

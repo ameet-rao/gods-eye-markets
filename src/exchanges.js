@@ -1,0 +1,6 @@
+// Listing exchange per ticker, as Google Finance spells it in quote URLs (SYMBOL:EXCHANGE).
+const EXCHANGE = {"AAPL":"NASDAQ","ADM":"NYSE","ALB":"NYSE","ALL":"NYSE","ASML":"NASDAQ","BG":"NYSE","CAT":"NYSE","CCJ":"NYSE","CEG":"NASDAQ","CIEN":"NYSE","COPX":"NYSEARCA","CORN":"NYSEARCA","CSX":"NASDAQ","CTVA":"NYSE","D":"NYSE","DAC":"NYSE","DAL":"NYSE","DOW":"NYSE","EIX":"NYSE","EQIX":"NASDAQ","EWG":"NYSEARCA","FANG":"NASDAQ","FCX":"NYSE","FRO":"NYSE","GFS":"NASDAQ","GIS":"NYSE","GNRC":"NYSE","HAS":"NASDAQ","HCI":"NYSE","HD":"NYSE","INSW":"NYSE","INTC":"NASDAQ","IRDM":"NASDAQ","KEX":"NYSE","KLAC":"NASDAQ","KMI":"NYSE","LMT":"NYSE","LNG":"NYSE","LYB":"NYSE","MATX":"NYSE","MOS":"NYSE","MP":"NYSE","MPC":"NYSE","NKE":"NYSE","NRG":"NYSE","NVDA":"NASDAQ","OXY":"NYSE","PCG":"NYSE","REMX":"NYSEARCA","RNR":"NYSE","RTX":"NYSE","RYAAY":"NASDAQ","SCCO":"NYSE","SONY":"NYSE","SQM":"NYSE","STNG":"NYSE","TGT":"NYSE","TM":"NYSE","TSLA":"NASDAQ","TSM":"NYSE","TSN":"NYSE","UEC":"NYSEAMERICAN","UNP":"NYSE","URA":"NYSEARCA","VALE":"NYSE","VLO":"NYSE","VMC":"NYSE","VRT":"NYSE","VSAT":"NASDAQ","VST":"NYSE","WEAT":"NYSEARCA","XOM":"NYSE","XYL":"NYSE","ZIM":"NYSE"};
+
+export function googleFinanceUrl(t) {
+  return `https://www.google.com/finance/quote/${encodeURIComponent(t)}:${EXCHANGE[t] || 'NYSE'}`;
+}

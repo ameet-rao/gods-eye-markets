@@ -55,7 +55,7 @@ async function run(name, viewport, mobile, colorScheme = 'dark') {
   check(refs >= 1, `${name}: ticker panel lists ${refs} signals`);
   await page.screenshot({ path: `screenshots/${name}-4-ticker.png` });
   const trade = await page.locator('#panel a.trade').getAttribute('href');
-  check(/^https:\/\/robinhood\.com\/us\/en\/stocks\/[A-Z]+\/$/.test(trade), `${name}: trade link ${trade}`);
+  check(/^https:\/\/www\.google\.com\/finance\/quote\/[A-Z]+:(NYSE|NASDAQ|NYSEARCA|NYSEAMERICAN|BATS)$/.test(trade), `${name}: trade link ${trade}`);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   check(!overflow, `${name}: no horizontal overflow`);
   await page.close();
