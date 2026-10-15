@@ -46,16 +46,45 @@ export function digest(articles) {
   return { articles: list.slice(0, 24), countries };
 }
 
-export async function fetchHeadlines(prev) {
-  try {
-    const r = await fetch(URL_, { signal: AbortSignal.timeout(20000), headers: { 'User-Agent': 'Mozilla/5.0 (GodsEyeMarkets/1.0)' } });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const j = JSON.parse(await r.text());
-    const d = digest(j.articles || []);
-    if (!d.articles.length) throw new Error('no articles');
-    return { takenAt: new Date().toISOString(), source: 'GDELT', ...d };
-  } catch (e) {
-    console.warn(`headlines: ${e.message}, keeping previous`);
-    return prev || null;
+const UA = { 'User-Agent': 'Mozilla/5.0 (GodsEyeMarkets/1.0)' };
+
+async function fromGdelt() {
+  let last;
+  // GDELT is keyless but sometimes drops connections from cloud runners; retry, then try plain http.
+  for (const u of [URL_, URL_, URL_.replace('https:', 'http:')]) {
+    try {
+      const r = await fetch(u, { signal: AbortSignal.timeout(30000), headers: UA });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = JSON.parse(await r.text());
+      if (j.articles?.length) return j.articles;
+      throw new Error('no articles');
+    } catch (e) { last = e; await new Promise((ok) => setTimeout(ok, 5000)); }
   }
+  throw new Error(`GDELT: ${last?.cause?.code || last?.message}`);
+}
+
+// Fallback: BBC World and Business RSS, which carry a thumbnail per story.
+async function fromBbc() {
+  const items = [];
+  for (const feed of ['https://feeds.bbci.co.uk/news/world/rss.xml', 'https://feeds.bbci.co.uk/news/business/rss.xml']) {
+    const xml = await (await fetch(feed, { signal: AbortSignal.timeout(20000), headers: UA })).text();
+    for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+      const tag = (t) => (m[1].match(new RegExp(`<${t}>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?<\/${t}>`)) || [])[1]?.trim() || '';
+      items.push({ title: tag('title'), url: tag('link'), domain: 'bbc.com', socialimage: (m[1].match(/<media:thumbnail[^>]*url="([^"]+)"/) || [])[1] || '' });
+    }
+  }
+  if (!items.length) throw new Error('BBC: no items');
+  return items;
+}
+
+export async function fetchHeadlines(prev) {
+  for (const [source, get] of [['GDELT', fromGdelt], ['BBC News', fromBbc]]) {
+    try {
+      const d = digest(await get());
+      if (!d.articles.length) throw new Error('nothing usable');
+      return { takenAt: new Date().toISOString(), source, ...d };
+    } catch (e) { console.warn(`headlines (${source}): ${e.message}`); }
+  }
+  console.warn('headlines: keeping previous');
+  return prev || null;
 }

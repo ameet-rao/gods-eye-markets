@@ -16,7 +16,8 @@ try { prev = JSON.parse(await readFile(out, 'utf8')); } catch {}
 if (process.env.PUBLISHED_URL) {
   try {
     const pub = await (await fetch(process.env.PUBLISHED_URL, { signal: AbortSignal.timeout(10000) })).json();
-    if (pub.takenAt > (prev.takenAt || '')) prev = pub;
+    // Take the newer copy, but keep any field it lacks (e.g. headlines) from the committed one.
+    if (pub.takenAt > (prev.takenAt || '')) prev = { ...prev, ...Object.fromEntries(Object.entries(pub).filter(([, v]) => v != null)) };
   } catch (e) { console.warn(`published data: ${e.message}`); }
 }
 

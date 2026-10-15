@@ -26,8 +26,9 @@ export function composeBrief(state, quote) {
   const big = state.events.filter((e) => e.level >= 2 && e.near?.length).sort((a, b) => b.level - a.level || a.near[0].d - b.near[0].d).slice(0, 3);
   for (const e of big) {
     const h = HOTSPOTS.find((x) => x.id === e.near[0].id);
-    const where = (e.place || '').split(',').at(-1).replace(/\+\d+$/, '').trim();
-    const title = e.title.length > 60 ? e.title.split(',')[0] : e.title;
+    const multi = /,|\+\d/.test(e.place || '') && e.type !== 'EQ';
+    const where = multi ? '' : (e.place || '').split(',').at(-1).trim();
+    const title = e.title.length > 60 ? `${e.title.split(',')[0]} and neighbours` : e.title;
     seen.push(`${title}${where && !title.includes(where) ? ` near ${where}` : ''} is within reach of ${h.name}.`);
   }
   if (!seen.length) seen.push(`${state.events.length} live hazards are on the globe, none close to a critical choke point.`);
@@ -54,9 +55,13 @@ export function briefCountries(state) {
   const fromNews = state.headlines?.countries || [];
   if (fromNews.length) return fromNews.slice(0, 6);
   const tally = new Map();
-  for (const e of state.events) for (const c of countriesIn(`${e.title} ${e.place}`)) {
-    if (!tally.has(c)) tally.set(c, { code: c, n: 0, title: e.title, url: e.gdacsUrl || e.url, domain: e.source, image: '' });
-    tally.get(c).n++;
+  for (const e of state.events) {
+    const cs = countriesIn(`${e.title} ${e.place}`);
+    if (cs.length > 3) continue; // continent-wide drought lists say little about any one country
+    for (const c of cs) {
+      if (!tally.has(c)) tally.set(c, { code: c, n: 0, title: e.title, url: e.gdacsUrl || e.url, domain: e.source, image: '' });
+      tally.get(c).n++;
+    }
   }
   return [...tally.values()].sort((a, b) => b.n - a.n).slice(0, 6);
 }
