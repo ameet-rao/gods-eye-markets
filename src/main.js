@@ -7,7 +7,8 @@ import countriesTopo from 'world-atlas/countries-110m.json';
 import './style.css';
 import { HOTSPOTS, CATEGORIES, EVENT_THEMES } from './hotspots.js';
 import { loadFeed, loadQuotes, mergeEvents, FEEDS } from './feeds.js';
-import { linkEvents, heat, ideasForEvent, leaderboard, allSymbols } from './ideas.js';
+import { linkEvents, heat, ideasForEvent, allSymbols } from './ideas.js';
+import { LAYERS, hotspotLayers, rateTickers } from './signals.js';
 import { lanesGeoJSON } from './lanes.js';
 import snapshot from './snapshot.json';
 
@@ -21,6 +22,8 @@ const state = {
   events: snapshot.events.map((e) => ({ ...e })),
   quotes: snapshot.quotes,
   takenAt: snapshot.takenAt,
+  layers: snapshot.layers || {},
+  ratings: [],
   quotesLive: false,
   streaming: false,
   feedStatus: { usgs: 'loading', gdacs: 'loading', eonet: 'loading', quotes: 'loading' },
@@ -36,6 +39,7 @@ function relink() {
   state.eventsById = new Map(state.events.map((e) => [e.id, e]));
 }
 relink();
+const ratingOf = (t) => state.ratings.find((r) => r.t === t);
 
 // ---------- quotes ----------
 function quote(t) {
@@ -48,6 +52,8 @@ function quote(t) {
 }
 const fmtPrice = (p) => (p >= 1000 ? p.toLocaleString('en-US', { maximumFractionDigits: 0 }) : p.toFixed(2));
 const fmtPct = (x) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}%`;
+function rerate() { state.ratings = rateTickers(state, quote); }
+rerate();
 
 function spark(closes, w = 64, h = 22) {
   const min = Math.min(...closes), max = Math.max(...closes);
@@ -409,6 +415,44 @@ function priceFoot() {
   return `<p class="foot">${src}. Change is vs prior close; sparkline is the last 5 sessions.</p>`;
 }
 
+// How each independent layer reads for a place (or, fused, for a ticker).
+function layersBlock(L, fused = false) {
+  const row = (key, label, v, note) => v == null
+    ? `<div class="lrow na"><span>${label}</span><span class="lbar"></span><small>${note}</small></div>`
+    : `<div class="lrow"><span>${label}</span><span class="lbar"><span style="width:${Math.round(v * 100)}%"></span></span><small>${note}</small></div>`;
+  // For a ticker, each layer is read at the exposure that drives it.
+  const at = (k) => (fused && L.at?.[k] ? HOTSPOTS.find((h) => h.id === L.at[k]) : null);
+  const raw = (k, h) => (h ? state.layers[k === 'air' ? 'aviation' : 'maritime']?.spots?.[h.id] : (k === 'air' ? L.airRaw : L.seaRaw));
+  const where = (h) => (h ? `${h.name}: ` : '');
+  const envNote = () => {
+    if (!fused) return L.events ? `${L.events} live event${L.events > 1 ? 's' : ''} in range` : 'No live events in range';
+    if (L.envEvent && !L.at.env) return L.envEvent;
+    const h = at('env');
+    if (!h || !L.env) return 'No live events near its exposures';
+    const n = state.links.get(h.id)?.length || 0;
+    return `${where(h)}${n} live event${n > 1 ? 's' : ''} in range`;
+  };
+  const airNote = () => {
+    const h = at('air'), a = raw('air', h);
+    if (L.air == null) return state.layers.aviation ? 'Too little air traffic near its exposures to read' : 'Waiting for the first OpenSky reading';
+    return `${where(h)}${a.now} aircraft aloft vs ${Math.round(a.base)} usual`;
+  };
+  const seaNote = () => {
+    const h = at('sea'), m = raw('sea', h);
+    if (L.sea == null) return state.layers.maritime ? 'No ports or straits among its exposures' : 'Off: needs a free aisstream.io key';
+    return `${where(h)}${Math.round(m.now * 100)}% of ${m.ships} ships stopped vs ${Math.round(m.base * 100)}% usual`;
+  };
+  const rows = [
+    row('infra', 'Infrastructure', L.infra, at('infra') ? `${at('infra').name}: structural risk ${Math.round(L.infra * 5)}/5` : `Structural risk ${Math.round(L.infra * 5)}/5`),
+    row('env', 'Environment', L.env, envNote()),
+    row('air', 'Aviation', L.air, airNote()),
+    row('sea', 'Maritime', L.sea, seaNote()),
+  ];
+  if (fused) rows.push(L.mkt == null ? row('mkt', 'Market', null, 'No price data')
+    : `<div class="lrow"><span>Market</span><span class="chg ${L.mkt >= 0 ? 'pos' : 'neg'}">${fmtPct(L.mkt)} over 5 days</span><small>${(L.side === 'long') === (L.mkt >= 0) ? 'Trend confirms the thesis' : 'Trend is fighting the thesis'}</small></div>`);
+  return `<div class="layers"><h3>Signal layers</h3>${rows.join('')}</div>`;
+}
+
 function renderPanel() {
   const p = $('#panel');
   const sel = state.selected;
@@ -425,6 +469,7 @@ function renderPanel() {
         <div class="metric">${esc(h.metric)}</div>
       </div>
       <p class="summary">${esc(h.summary)}</p>
+      ${layersBlock(hotspotLayers(h, state))}
       ${near.length ? `<div class="threats"><h3>Nearby live events</h3><ul>${near.map(({ e, d }) => `<li><button class="ev lvl${e.level}" data-event="${esc(e.id)}"><span class="ldot"></span><b>${esc(e.title)}</b><span>${esc(typeLabel(e.type))} · ${km(d)} away · ${ago(e.time)}</span></button></li>`).join('')}</ul></div>` : `<p class="calm">No live events nearby. These are the standing ideas if this spot is disrupted.</p>`}
       <h3 class="ideas-h">Ideas</h3>
       <ul class="ideas">${h.ideas.map(ideaRow).join('')}</ul>
@@ -451,11 +496,14 @@ function renderPanel() {
     const refs = [];
     for (const h of HOTSPOTS) for (const i of h.ideas) if (i.t === t) refs.push({ label: h.name, side: i.side, why: i.why, hotspot: h.id });
     for (const e of state.events) for (const i of ideasForEvent(e)) if (i.t === t) refs.push({ label: e.title, side: i.side, why: i.why, event: e.id });
+    const r = ratingOf(t);
     html = `
       <div class="p-head" style="--cat:#3fd0ff">
+        ${r ? `<div class="eyebrow"><span class="rating ${r.rating}">${{ buy: 'Long-term buy', hold: 'Hold', sell: 'Sell' }[r.rating]}</span></div>` : ''}
         <h2>${esc(t)} <small>${esc(q?.name || '')}</small></h2>
         ${q ? `<div class="metric big"><span class="px" data-q="${esc(t)}" data-f="px">${fmtPrice(q.last)}</span> <span class="chg ${q.chg >= 0 ? 'pos' : 'neg'}" data-q="${esc(t)}" data-suffix=" 1d">${fmtPct(q.chg)} 1d</span> <span class="chg ${q.chg5 >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg5)} 5d</span> ${spark(q.closes, 96, 28)}</div>` : ''}
       </div>
+      ${r ? `<p class="summary">${esc(r.why)}.</p>${layersBlock(r, true)}` : ''}
       <h3 class="ideas-h">Appears in ${refs.length} signal${refs.length === 1 ? '' : 's'}</h3>
       <ul class="refs">${refs.map((r) => `<li><button class="ev" ${r.hotspot ? `data-hotspot="${r.hotspot}"` : `data-event="${esc(r.event)}"`}><span class="side ${r.side}">${r.side.toUpperCase()}</span><b>${esc(r.label)}</b><span>${esc(r.why)}</span></button></li>`).join('')}</ul>
       <div class="acts wide">
@@ -494,7 +542,47 @@ $('#filters').addEventListener('click', (e) => {
   applyLayerFilter();
   updateLabels();
 });
-$('#q').addEventListener('input', (e) => { state.query = e.target.value.trim().toLowerCase(); renderList(); updateLabels(); });
+$('#q').addEventListener('input', (e) => {
+  state.query = e.target.value.trim().toLowerCase();
+  $('#searchHov').classList.toggle('has-q', !!state.query);
+  if (state.query && window.matchMedia('(max-width: 760px)').matches) $('#rail').classList.add('open');
+  renderList(); updateLabels();
+});
+$('#q').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.target.value = ''; e.target.dispatchEvent(new Event('input')); e.target.blur(); }
+  if (e.key !== 'Enter') return;
+  const t = e.target.value.trim().toUpperCase();
+  if (state.quotes.q[t] || state.ratings.some((r) => r.t === t)) select({ kind: 'ticker', id: t });
+  else $('#list [data-hotspot], #list [data-event]')?.click();
+});
+// Hovering the icon opens the field and puts the cursor in it.
+$('#searchHov').addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') $('#q').focus({ preventScroll: true }); });
+$('#searchHov').addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !$('#q').value) $('#q').blur(); });
+$('#searchBtn').addEventListener('click', () => $('#q').focus());
+$('#q').addEventListener('focus', () => document.body.classList.add('searching'));
+$('#q').addEventListener('blur', () => document.body.classList.remove('searching'));
+
+// ---------- buy / hold / sell list ----------
+function renderRatings() {
+  const col = (key, title, note) => {
+    const rows = state.ratings.filter((r) => r.rating === key).slice(0, 6);
+    const top = rows[0]?.conviction || 1;
+    return `<section class="rcol ${key}"><h4><i></i>${title}</h4><ol>${rows.map((r) => {
+      const q = quote(r.t);
+      return `<li><button class="rrow" role="menuitem" data-ticker="${esc(r.t)}"><b>${esc(r.t)}</b><span class="rname">${esc(q?.name || '')}</span>${q ? `<em data-q="${esc(r.t)}" class="${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)}</em>` : '<em></em>'}<span class="bar"><span style="width:${Math.max(6, Math.round((r.conviction / top) * 100))}%"></span></span></button></li>`;
+    }).join('') || '<li class="rname">None right now</li>'}</ol></section>`;
+  };
+  $('#ratings').innerHTML = col('buy', 'Long-term buy') + col('hold', 'Hold') + col('sell', 'Sell')
+    + `<p class="rnote">Fused from infrastructure, environment, aviation${state.layers.maritime ? ', maritime' : ''} and market layers. Not financial advice.</p>`;
+}
+// Picking a ticker closes the list until the pointer leaves it.
+$('#ratings').addEventListener('click', (e) => {
+  if (!e.target.closest('[data-ticker]')) return;
+  document.activeElement?.blur();
+  $('#listHov').classList.add('closed');
+});
+$('#listHov').addEventListener('pointerleave', () => $('#listHov').classList.remove('closed'));
+$('#listBtn').addEventListener('click', () => $('#listHov').classList.remove('closed'));
 
 function passesFilter(h) {
   if (state.filter === 'live') return (state.links.get(h.id)?.length || 0) > 0;
@@ -538,7 +626,7 @@ function renderList() {
 
 // ---------- tape ----------
 function renderTape() {
-  const lb = leaderboard(state.events, state.links).slice(0, 18);
+  const lb = state.ratings.slice(0, 18);
   const items = lb.map((s) => {
     const q = quote(s.t);
     return `<button class="titem" data-ticker="${esc(s.t)}"><b>${esc(s.t)}</b><span class="side ${s.side}">${s.side === 'long' ? '▲' : '▼'}</span>${q ? `<span data-q="${esc(s.t)}" data-f="px">${fmtPrice(q.last)}</span><span data-q="${esc(s.t)}" class="${q.chg >= 0 ? 'pos' : 'neg'}">${fmtPct(q.chg)}</span>` : ''}</button>`;
@@ -578,6 +666,7 @@ $('#railClose').addEventListener('click', () => $('#rail').classList.remove('ope
 renderFeeds();
 renderList();
 renderTape();
+renderRatings();
 
 // The deploy job republishes data.json every few minutes; open pages pick it up without a reload.
 async function loadPublished() {
@@ -610,6 +699,7 @@ async function goLive() {
     state.events = [...state.events.filter((e) => !failed.has(srcOf[e.source])), ...published.events.filter((e) => failed.has(srcOf[e.source]))];
     state.quotes = { ...published.quotes, q: { ...state.quotes.q, ...published.quotes.q } };
     state.takenAt = published.takenAt;
+    if (published.layers) state.layers = published.layers;
     reapplyTrades();
   }
   for (const [k, r] of results) {
@@ -630,9 +720,11 @@ async function goLive() {
   if (q.ok) { state.quotes = { asOf: q.asOf, source: q.source, q: { ...state.quotes.q, ...q.q } }; reapplyTrades(); }
   state.feedStatus.quotes = q.ok || state.streaming || freshEnough(state.takenAt) ? 'live' : 'snapshot';
   for (const k of Object.keys(FEEDS)) if (state.feedStatus[k] !== 'live' && freshEnough(state.takenAt)) state.feedStatus[k] = 'live';
+  rerate();
   renderFeeds();
   renderList();
   renderTape();
+  renderRatings();
   refreshMapData();
   if (state.selected?.kind === 'event' && !state.eventsById.has(state.selected.id)) select(null);
   else if (state.selected) renderPanel();
@@ -676,7 +768,7 @@ setInterval(() => { if (priceDirty) { priceDirty = false; patchPrices(); } }, 10
 function streamPrices() {
   if (!FINNHUB_KEY) return;
   // The free plan streams up to 50 symbols per connection: take the most-signalled ones.
-  const syms = leaderboard(state.events, state.links).map((s) => s.t).slice(0, 50);
+  const syms = state.ratings.map((s) => s.t).slice(0, 50);
   let retry = 2000;
   const open = () => {
     const ws = new WebSocket(`wss://ws.finnhub.io?token=${encodeURIComponent(FINNHUB_KEY)}`);

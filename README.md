@@ -47,6 +47,8 @@ on the bundled snapshot (it still tries the public feeds directly).
 | Storm tracks, volcanoes | NASA EONET v3 | no |
 | Prices (5 daily closes) | Yahoo Finance spark endpoint, server-side | no |
 | Streaming trades (optional) | Finnhub WebSocket | free key |
+| Airspace traffic per hotspot (hourly) | OpenSky Network REST, at build time | no |
+| Ship congestion per port and strait (optional) | aisstream.io WebSocket, at build time | free key (`AISSTREAM_KEY` secret) |
 
 The header pill shows whether data is live (fetched or published in the last 20 minutes). When a source can't be
 reached, the app falls back to `src/snapshot.json`, which is baked into the build. Refresh it
@@ -60,7 +62,14 @@ with `npm run snapshot` (fetches everything from Node), then `npm run build`.
   strength, e.g. M7.5+ quake 900 km, cyclone 900 km, drought 1,600 km) and computes a heat
   score. A live event's ideas come from region rules (Japan, Taiwan, Chile, Gulf Coast...),
   then nearby hotspots, then a per-hazard playbook. Remote, low-alert events get no ideas.
-- The bottom tape ranks tickers by how many active signals point at them.
+- `src/signals.js` is the engine. Phase 1 scores each layer on its own for every hotspot:
+  infrastructure (curated risk), environment (live events in range), aviation (OpenSky
+  airborne traffic vs its running average; a drop means disruption) and maritime (AIS share of
+  ships anchored or stopped vs its running average; a rise means congestion). Phase 2 fuses
+  them per ticker across every place it is exposed to, with structural risk as the long-term
+  thesis and live layers multiplying it, then checks the 5-day trend for confirmation.
+- The list icon in the header shows the result: long-term buy (top third of net-long
+  conviction, not up more than 12% in 5 days), hold (the other net longs) and sell (net short).
 
 ## Scripts
 

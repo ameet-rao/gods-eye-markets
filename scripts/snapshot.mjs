@@ -5,11 +5,19 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { FEEDS, normalizeUsgs, normalizeGdacs, normalizeEonet, mergeEvents } from '../src/feeds.js';
 import { allSymbols } from '../src/ideas.js';
 import { fetchQuotes, fetchText } from './yahoo.mjs';
+import { fetchAviation, fetchMaritime } from './layers.mjs';
 
 const rawDir = process.argv.includes('--raw') ? process.argv[process.argv.indexOf('--raw') + 1] : null;
 const out = new URL('../src/snapshot.json', import.meta.url);
 let prev = {};
 try { prev = JSON.parse(await readFile(out, 'utf8')); } catch {}
+// The deployed site's data.json carries the running baselines between builds.
+if (process.env.PUBLISHED_URL) {
+  try {
+    const pub = await (await fetch(process.env.PUBLISHED_URL, { signal: AbortSignal.timeout(10000) })).json();
+    if (pub.takenAt > (prev.takenAt || '')) prev = pub;
+  } catch (e) { console.warn(`published data: ${e.message}`); }
+}
 
 async function feed(key) {
   if (rawDir) return JSON.parse(await readFile(`${rawDir}/${key}.json`, 'utf8'));
@@ -31,5 +39,13 @@ if (!rawDir) {
   catch (e) { console.warn(`quotes: failed (${e.message}), keeping previous`); }
 }
 
-await writeFile(out, JSON.stringify({ takenAt: new Date(takenAt).toISOString(), events, quotes }));
+const layers = { ...prev.layers };
+if (!rawDir) {
+  layers.aviation = await fetchAviation(prev.layers?.aviation);
+  console.log(`aviation: ${Object.keys(layers.aviation?.spots || {}).length} hotspots`);
+  layers.maritime = await fetchMaritime(prev.layers?.maritime, process.env.AISSTREAM_KEY);
+  console.log(`maritime: ${process.env.AISSTREAM_KEY ? Object.keys(layers.maritime?.spots || {}).length + ' hotspots' : 'no AISSTREAM_KEY, skipped'}`);
+}
+
+await writeFile(out, JSON.stringify({ takenAt: new Date(takenAt).toISOString(), events, quotes, layers }));
 console.log(`wrote ${out.pathname}: ${events.length} events, ${Object.keys(quotes?.q || {}).length} quotes`);

@@ -28,6 +28,10 @@ jobs:
       - run: npm ci
       - name: Refresh snapshot (keeps the committed one if a source is down)
         run: npm run snapshot
+        env:
+          PUBLISHED_URL: https://ameet-rao.github.io/gods-eye-markets/data.json
+          # Optional: a free aisstream.io key turns on the maritime congestion layer.
+          AISSTREAM_KEY: ${{ secrets.AISSTREAM_KEY }}
         continue-on-error: true
       - run: npm run build
         env:
