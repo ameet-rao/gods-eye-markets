@@ -37,8 +37,10 @@ export async function fetchMaritime(prev, key, { seconds = 60, url = 'wss://stre
   const seen = new Map(spots.map((h) => [h.id, new Map()]));
   await new Promise((resolve) => {
     const ws = new WebSocket(url);
-    const done = () => { try { ws.close(); } catch {} resolve(); };
-    const timer = setTimeout(done, seconds * 1000);
+    let closed = false;
+    const done = () => { if (closed) return; closed = true; clearTimeout(timer); try { ws.close(); } catch {} resolve(); };
+    let timer = setTimeout(done, seconds * 1000);
+    ws.onclose = (e) => { if (!closed) console.warn('maritime: socket closed', e.code, e.reason || ''); done(); };
     ws.onopen = () => ws.send(JSON.stringify({ APIKey: key, BoundingBoxes: boxes, FilterMessageTypes: ['PositionReport'] }));
     ws.onmessage = async (m) => {
       let d;
@@ -53,7 +55,7 @@ export async function fetchMaritime(prev, key, { seconds = 60, url = 'wss://stre
         if (lat >= a && lat <= c && lon >= b && lon <= e) seen.get(h.id).set(meta.MMSI, stopped);
       });
     };
-    ws.onerror = (e) => { console.warn('maritime: socket error', e.message || ''); clearTimeout(timer); done(); };
+    ws.onerror = (e) => { console.warn('maritime: socket error', e.message || ''); done(); };
   });
   const out = {};
   for (const h of spots) {
