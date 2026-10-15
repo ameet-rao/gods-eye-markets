@@ -74,8 +74,10 @@ export function openBrief(state, quote, { onClose }) {
 
   const paras = composeBrief(state, quote);
   const text = root.querySelector('#bText');
-  text.innerHTML = paras.map(() => '<p></p>').join('');
-  const ps = [...text.querySelectorAll('p')];
+  // Each paragraph holds its full text as invisible ghost from the start, so the column has its
+  // final height before typing begins and the movers beside it can be sized to end on its last line.
+  text.innerHTML = paras.map((t) => `<p><span class="t"></span><span class="g">${esc(t)}</span></p>`).join('');
+  const ps = [...text.querySelectorAll('p')].map((p) => ({ p, t: p.firstChild, g: p.lastChild }));
 
   const movers = moversOf(state, quote);
   root.querySelector('#bMovers').innerHTML = movers.map((m, i) => `
@@ -99,7 +101,7 @@ export function openBrief(state, quote, { onClose }) {
   let pi = 0, ci = 0, timer = null, finished = false;
   const finish = () => {
     clearTimeout(timer);
-    ps.forEach((p, i) => { p.textContent = paras[i]; });
+    ps.forEach((x, i) => { x.t.textContent = paras[i]; x.g.textContent = ''; x.p.classList.remove('typing'); });
     finished = true;
     root.classList.add('done');
   };
@@ -107,9 +109,10 @@ export function openBrief(state, quote, { onClose }) {
     if (pi >= paras.length) return finish();
     const para = paras[pi];
     ci = Math.min(para.length, ci + (para[ci] === ' ' ? 2 : 1));
-    ps[pi].textContent = para.slice(0, ci);
-    ps[pi].classList.add('typing');
-    if (ci >= para.length) { ps[pi].classList.remove('typing'); pi++; ci = 0; timer = setTimeout(tick, 420); return; }
+    ps[pi].t.textContent = para.slice(0, ci);
+    ps[pi].g.textContent = para.slice(ci);
+    ps[pi].p.classList.add('typing');
+    if (ci >= para.length) { ps[pi].p.classList.remove('typing'); pi++; ci = 0; timer = setTimeout(tick, 420); return; }
     const ch = para[ci - 1];
     timer = setTimeout(tick, /[.?!]/.test(ch) ? 260 : /[,;:]/.test(ch) ? 110 : 16 + Math.random() * 18);
   };
