@@ -22,6 +22,19 @@ async function run(name, viewport, mobile, colorScheme = 'dark') {
   page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|net::|CORS|fonts\.g/.test(m.text())) errors.push(`${name}: ${m.text()}`); });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
+  // Start screen: typed brief, movers and flags, then into the globe.
+  await page.waitForSelector('#brief.on', { timeout: 15000 });
+  await page.waitForTimeout(3500);
+  const typed = (await page.locator('#bText').innerText()).trim().length;
+  const movers = await page.locator('.b-mover').count();
+  const flags = await page.locator('.b-flag').count();
+  check(typed > 10 && movers >= 3 && flags >= 1, `${name}: start screen types the brief (${typed} chars so far), ${movers} movers, ${flags} countries`);
+  await page.screenshot({ path: `screenshots/${name}-0-brief.png` });
+  await page.locator('#bText').click();
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `screenshots/${name}-0-brief-full.png` });
+  await page.locator('#bEnter').click();
+  await page.waitForSelector('#brief', { state: 'hidden', timeout: 5000 });
   await page.waitForFunction(() => document.body.classList.contains('ready'), null, { timeout: 30000 });
   await page.waitForFunction(() => !document.querySelector('.feed.loading'), null, { timeout: 30000 });
   await page.waitForTimeout(1500);

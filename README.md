@@ -47,12 +47,23 @@ on the bundled snapshot (it still tries the public feeds directly).
 | Storm tracks, volcanoes | NASA EONET v3 | no |
 | Prices (5 daily closes) | Yahoo Finance spark endpoint, server-side | no |
 | Streaming trades (optional) | Finnhub WebSocket | free key |
+| Daily headlines and countries in the news | GDELT DOC API (last 24h), at build time | no |
+| Flags | flagcdn.com | no |
 | Airspace traffic per hotspot (hourly) | OpenSky Network REST, at build time | no |
 | Ship congestion per port and strait (optional) | aisstream.io WebSocket, at build time | free key (`AISSTREAM_KEY` secret) |
 
 The header pill shows whether data is live (fetched or published in the last 20 minutes). When a source can't be
 reached, the app falls back to `src/snapshot.json`, which is baked into the build. Refresh it
 with `npm run snapshot` (fetches everything from Node), then `npm run build`.
+
+## Start screen
+
+Every load opens on a brief in EB Garamond: today's top headlines (GDELT), what the globe is
+detecting (aviation, maritime and hazard signals near hotspots), the biggest movers among the
+tracked tickers, and the countries in the news with their flag and lead story. It is rebuilt by
+every scheduled deploy, so it changes daily. If GDELT is down it falls back to the previous
+headlines, and the flags fall back to countries named in live hazard reports. Add `?nobrief`
+to the URL to skip it; the newspaper icon in the header reopens it.
 
 ## How hotspots become tickers
 

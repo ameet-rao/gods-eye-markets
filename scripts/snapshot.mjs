@@ -6,6 +6,7 @@ import { FEEDS, normalizeUsgs, normalizeGdacs, normalizeEonet, mergeEvents } fro
 import { allSymbols } from '../src/ideas.js';
 import { fetchQuotes, fetchText } from './yahoo.mjs';
 import { fetchAviation, fetchMaritime } from './layers.mjs';
+import { fetchHeadlines } from './headlines.mjs';
 
 const rawDir = process.argv.includes('--raw') ? process.argv[process.argv.indexOf('--raw') + 1] : null;
 const out = new URL('../src/snapshot.json', import.meta.url);
@@ -39,6 +40,8 @@ if (!rawDir) {
   catch (e) { console.warn(`quotes: failed (${e.message}), keeping previous`); }
 }
 
+const headlines = rawDir ? prev.headlines : await fetchHeadlines(prev.headlines);
+console.log(`headlines: ${headlines?.articles?.length || 0} articles, ${headlines?.countries?.length || 0} countries`);
 const layers = { ...prev.layers };
 if (!rawDir) {
   layers.aviation = await fetchAviation(prev.layers?.aviation);
@@ -47,5 +50,5 @@ if (!rawDir) {
   console.log(`maritime: ${process.env.AISSTREAM_KEY ? Object.keys(layers.maritime?.spots || {}).length + ' hotspots' : 'no AISSTREAM_KEY, skipped'}`);
 }
 
-await writeFile(out, JSON.stringify({ takenAt: new Date(takenAt).toISOString(), events, quotes, layers }));
+await writeFile(out, JSON.stringify({ takenAt: new Date(takenAt).toISOString(), events, quotes, layers, headlines }));
 console.log(`wrote ${out.pathname}: ${events.length} events, ${Object.keys(quotes?.q || {}).length} quotes`);

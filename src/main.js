@@ -9,6 +9,7 @@ import { HOTSPOTS, CATEGORIES, EVENT_THEMES } from './hotspots.js';
 import { loadFeed, loadQuotes, mergeEvents, FEEDS } from './feeds.js';
 import { linkEvents, heat, ideasForEvent, allSymbols } from './ideas.js';
 import { LAYERS, hotspotLayers, rateTickers } from './signals.js';
+import { openBrief } from './brief.js';
 import { lanesGeoJSON } from './lanes.js';
 import snapshot from './snapshot.json';
 
@@ -23,6 +24,7 @@ const state = {
   quotes: snapshot.quotes,
   takenAt: snapshot.takenAt,
   layers: snapshot.layers || {},
+  headlines: snapshot.headlines || null,
   ratings: [],
   quotesLive: false,
   streaming: false,
@@ -668,6 +670,13 @@ renderList();
 renderTape();
 renderRatings();
 
+// ---------- start screen ----------
+function showBrief() {
+  openBrief(state, quote, { onClose: (ticker) => { if (ticker) select({ kind: 'ticker', id: ticker }); map.resize(); } });
+}
+$('#briefBtn').addEventListener('click', showBrief);
+if (!/[?&]nobrief\b/.test(location.search)) showBrief();
+
 // The deploy job republishes data.json every few minutes; open pages pick it up without a reload.
 async function loadPublished() {
   try {
@@ -700,6 +709,7 @@ async function goLive() {
     state.quotes = { ...published.quotes, q: { ...state.quotes.q, ...published.quotes.q } };
     state.takenAt = published.takenAt;
     if (published.layers) state.layers = published.layers;
+    if (published.headlines) state.headlines = published.headlines;
     reapplyTrades();
   }
   for (const [k, r] of results) {
